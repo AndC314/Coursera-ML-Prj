@@ -1,0 +1,162 @@
+---
+title: "Coursera ML Final Project"
+author: "Mohammad Basheer Tantawy "
+date: "November 19, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Coursera Practical Machine Learning - Final Project  
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to build model which can predict if the activity is done in correct way.
+
+###Loading and EDA
+following some EDA results after loading the training data  
+Data Dimenssion
+```{r EDA, echo=TRUE, eval=TRUE, cache=TRUE}
+library(ggplot2)
+TData <- read.csv("pml-training.csv")
+DDim <- as.character(dim(TData))
+DataDim <- paste("Training Data Dim = ", DDim[1] , " X ",  DDim[2])
+print(DataDim)
+```
+---------------
+
+Sample of 8 random columns 
+```{r EDA2, echo=TRUE, eval=TRUE}
+print(head(n= 4, TData[,sample(160,8)]))
+
+```
+-------------
+
+Following Scatter plot for some features against classe
+```{r EDA4, echo=TRUE, eval=FALSE}
+featurePlot(x = TData[,c("gyros_belt_z","magnet_dumbbell_x","gyros_arm_x","roll_forearm", "classe")], y = TData$classe, plot = "pairs")
+
+```
+
+```{r EDA5, echo=FALSE, eval=TRUE, cache=TRUE}
+library(ggplot2)
+library(caret)
+featurePlot(x = TData[,c("gyros_belt_z","magnet_dumbbell_x","gyros_arm_x","roll_forearm", "classe")], y = TData$classe, plot = "pairs")
+
+```
+------------------  
+
+###choose features set
+Features used to train the model, had been selected based on filter method of CFS(Correlation-based Feature Selection) of Mark.A Hall university of Waikato, Hamilton New Zealand.  
+as this is methodology does not depend on the used learning algorithm (during training model) and it could be applied to a large number of features as preprocessing step.  
+refer to https://researchcommons.waikato.ac.nz/bitstream/handle/10289/1024/uow-cs-wp-2000-08.pdf  
+*this filter method is implemented in library "FSelector"*  
+**following code used to select the features**
+```{r Feature_Select, eval=TRUE, echo=TRUE, cache=TRUE}
+library(FSelector)
+TData <- read.csv("pml-training.csv")
+colToSelectFrom = c(c(15:159),160)
+SmlTData = TData[,colToSelectFrom]
+Fselected <- cfs(classe~., SmlTData)
+print(Fselected)
+```
+
+
+###The Criteria to select a model
+**1- **First use the selected features to train three models which expected to have good results as classifiers.  
+```{r features, eval= FALSE}
+SelFeatures <- c("gyros_belt_z","accel_belt_z","magnet_belt_z","gyros_arm_x","magnet_arm_x","gyros_dumbbell_y","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","classe")
+```
+
+**2- **The three models are Random Forest-RF, Boosting-BGM and Support Vector Machine-SVM.  
+**3- **Using fold k=3 to divide the data into 2/3 training data and 1/3 for testing data.  
+**4- **Training and testing data will be selected in random order, to make sure it covers all possible values of "classe" in both sets.  
+**5- **Repeat the previous step 3 times to have 3 different partitioning samples   
+**following code of partitioning the data into three samples** 
+```{r flodinh, eval= FALSE}
+set.seed(3322)
+DtLeng <- length(TData$classe)
+#create three indeices for three partioned data
+ind1 = sample(DtLeng, as.integer(DtLeng/3))  
+ind2 = sample(DtLeng, as.integer(DtLeng/3))
+ind3 = sample(DtLeng, as.integer(DtLeng/3))
+
+TDPart1 <- TData[-ind1,SelFeatures] #2/3 of the data for training 
+TstPart1 <- TData[ind1,SelFeatures] #1/3 of the data for testing
+
+TDPart2 <- TData[-ind2,SelFeatures] #second partition of data
+TstPart2 <- TData[ind2,SelFeatures]
+
+TDPart3 <- TData[-ind3,SelFeatures] #third partition of data
+TstPart3 <- TData[ind3,SelFeatures]
+```
+
+**6- **For each model, train the model with training data and test its accuracy with test data for each of the three samples of data.  
+**7-** Get the accuracy of the three testing results for each model by getting the percentage of the correct classification.   
+**8- **Model with the highest average results will be selected.  
+**following sample of training and testing for the first sample of the data**  
+```{r Model_Eval,  eval= FALSE}
+library(caret)
+library(e1071)
+
+modelRF1 <- train(classe ~ ., method="rf",data=TDPart1)
+resRF1 <- predict(modelRF1, newdata = TstPart1)
+accuracyRF1 <- length(resRF1[resRF1 == TstPart1$classe])/ length(TstPart1$classe)
+
+modelGBM1 <- <- train(classe ~ ., method="gbm",data=TDPart1, verbose = FALSE)
+resGBM1 <- predict(modelGBM1, newdata = TstPart1)
+accuracyresGBM1 <- length(resGBM1[resGBM1 == TstPart1$classe])/ length(TstPart1$classe)
+
+modelSVM1 <- svm(classe ~ ., data=TDPart1)
+resSVM1 <- predict(modelSVM1, newdata = TstPart1)
+accuracySVM1 <- length(resSVM1[resSVM1 == TstPart1$classe])/ length(TstPart1$classe)
+```
+
+
+```{r Best_Model, echo= FALSE, eval= TRUE}
+
+ResRF1= 0.9735474
+ResRF2= 0.9723242
+ResRF3= 0.9730887
+RDF <- data.frame(ResRF1, ResRF2, ResRF3)
+colnames(RDF) <- c("Sample1","Sample2","Sample3")
+
+ResGBM1= 0.883945
+ResGBM2= 0.8785933
+ResGBM3= 0.885474
+GBMDF <- data.frame(ResGBM1, ResGBM2, ResGBM3)
+colnames(GBMDF) <- c("Sample1","Sample2","Sample3")
+
+ResSVM1= 0.8527523
+ResSVM2= 0.846789
+ResSVM3= 0.8522936
+SVMDF <- data.frame(ResSVM1, ResSVM2, ResSVM3)
+colnames(SVMDF) <- c("Sample1","Sample2","Sample3")
+
+AllDF <- rbind(RDF,GBMDF,SVMDF)
+rownames(AllDF) <- c("RF", "GBM", "SVM")
+```
+### following results accuracy of each model with each sample of data
+
+```{r Disp_Res, echo=FALSE, results= "asis"}
+library(knitr)
+kable(AllDF)
+```
+ 
+**it is Clear that best accuracy for RF model.**  
+  
+so the selected model is:  
+**-RF with features: "gyros_belt_z", "accel_belt_z", "magnet_belt_z", "gyros_arm_x", "magnet_arm_x", "gyros_dumbbell_y", "magnet_dumbbell_x", "magnet_dumbbell_y", "magnet_dumbbell_z", "roll_forearm", and "pitch_forearm"**  
+**-Expected out of sample error to be max 3%**
+  
+By training the model with the full training data, and then predict the project quiz **results accuracy is 100%. for all 20 cases**  
+  
+**End of Report**  
+
+
+
+
+
+
+
+
+
